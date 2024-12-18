@@ -1,51 +1,74 @@
-telgram_bot_token = "7367595601:AAGjydMTnUZiybjkswSdnLKxWoOc1LUYo38"
-open_weather_token = "6a22c05ed0565ed32a595d8754feac40"
-import requests
+import asyncio
+import aiohttp
 import datetime
-from aiogram import Bot, types
-from aiogram import Dispatcher
-from aiogram import executor
 
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import Message
 
-bot = Bot(token=telgram_bot_token)
+# Ваш токен Telegram бота
+TELEGRAM_BOT_TOKEN = "7367595601:AAGjydMTnUZiybjkswSdnLKxWoOc1LUYo38"
+
+# Токен OpenWeatherMap API
+OPEN_WEATHER_MAP_API_KEY = "e435ca744b6743415bb80d0df802ec40"
+
+# Инициализация бота и диспетчера
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher(bot)
 
-@dp.message_handler(commands=["start"])
-async def start(message):
-    await message.reply("type the name of your city and i will give you the weather")
 
+# Обработчик команды /start
+@dp.message_handler(commands=['start'])
+async def start_command(message: Message):
+    await message.answer('Привет! Напиши мне название города, чтобы узнать погоду.')
+
+
+# Обработчик всех сообщений
 @dp.message_handler()
-async def get_weather(message):
+async def get_weather(message: Message):
     try:
-        r = requests.get(
-            f"https://api.openweathermap.org/data/2.5/weather?q={message.text}&appid={open_weather_token}&units=metric"
+        # Получение данных о погоде через API
+        async with aiohttp.ClientSession() as session:
+            url = f'https://api.openweathermap.org/data/2.5/weather?' \
+                  f'q={message.text}&' \
+                  f'appid={OPEN_WEATHER_MAP_API_KEY}&' \
+                  f'units=metric'
+            
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    raise ValueError('Ошибка при запросе к API OpenWeatherMap')
+                
+                data = await resp.json()
+
+        # Извлечение данных из ответа
+        city = data['name']
+        temperature = data['main']['temp']
+        humidity = data['main']['humidity']
+        pressure = data['main']['pressure']
+        wind_speed = data['wind']['speed']
+        sunrise_time = datetime.datetime.fromtimestamp(data['sys']['sunrise']).strftime('%H:%M:%S')
+        sunset_time = datetime.datetime.fromtimestamp(data['sys']['sunset']).strftime('%H:%M:%S')
+        weather_type = data['weather'][0]['description'].capitalize()
+
+        # Формирование сообщения
+        answer_message = (
+            f'<b>{city}</b>\n\n'
+            f'Температура: {temperature}C°\n'
+            f'Влажность: {humidity}%\n'
+            f'Давление: {pressure} гПа\n'
+            f'Скорость ветра: {wind_speed} м/с\n'
+            f'Время восхода солнца: {sunrise_time}\n'
+            f'Время заката солнца: {sunset_time}\n'
+            f'Описание погоды: {weather_type}'
         )
-        data = r.json()
-        #pprint(data)
-        city = data["name"]
-        temp = data["main"]["temp"]
-        humidity = data["main"]["humidity"]
-        pressure =  data["main"]["pressure"]
-        wind_speed = data["wind"]["speed"]
-        sunrise = datetime.datetime.fromtimestamp(data["sys"]["sunrise"])
-        sunset = datetime.datetime.fromtimestamp(data["sys"]["sunset"])
-        length_of_the_day = datetime.datetime.fromtimestamp(data["sys"]["sunrise"]) - datetime.datetime.fromtimestamp(data["sys"]["sunset"])
-        type_of_weather = data["weather"][0]["main"]
-        await message.reply(
-            f"City: {city} \n" +
-            f"Temperature: {temp} \n" +
-            f"Humidity: {humidity} \n" +
-            f"Pressure: {pressure} \n" +
-            f"Speed of wind: {wind_speed} \n" +
-            f"Sunrise time: {sunrise} \n" +
-            f"Sunset time: {sunset} \n" +
-            f"Length of the day: {length_of_the_day} \n" +
-            f"Type of the weather: {type_of_weather} \n"
-        )
+
+        # Отправка сообщения пользователю
+        await message.answer(answer_message, parse_mode='HTML')
+    
     except Exception as e:
-        await message.reply(print("Проверьте название города"))
+        print(e)
+        await message.answer('Пожалуйста, проверьте правильность названия города.')
 
 
-
-if name == "main":
-    executor.start_polling(dp)
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    dp.start_polling(loop=loop)
