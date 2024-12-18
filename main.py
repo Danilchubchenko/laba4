@@ -4,6 +4,7 @@ import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
+from aiogram.filters import Command
 
 # Ваш токен Telegram бота
 TELEGRAM_BOT_TOKEN = "7367595601:AAGjydMTnUZiybjkswSdnLKxWoOc1LUYo38"
@@ -13,18 +14,18 @@ OPEN_WEATHER_MAP_API_KEY = "e435ca744b6743415bb80d0df802ec40"
 
 # Инициализация бота и диспетчера
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
 
 # Обработчик команды /start
-@dp.message_handler(commands=['start'])
-async def start_command(message: Message):
-    await message.answer('Привет! Напиши мне название города, чтобы узнать погоду.')
+@dp.message(Command(commands=["start"]))
+async def start_command(message: types.Message):
+    await message.answer("Привет! Напишите мне название города, чтобы узнать погоду.")
 
 
 # Обработчик всех сообщений
-@dp.message_handler()
-async def get_weather(message: Message):
+@dp.message()
+async def get_weather(message: types.Message):
     try:
         # Получение данных о погоде через API
         async with aiohttp.ClientSession() as session:
@@ -32,11 +33,11 @@ async def get_weather(message: Message):
                   f'q={message.text}&' \
                   f'appid={OPEN_WEATHER_MAP_API_KEY}&' \
                   f'units=metric'
-            
+
             async with session.get(url) as resp:
                 if resp.status != 200:
                     raise ValueError('Ошибка при запросе к API OpenWeatherMap')
-                
+
                 data = await resp.json()
 
         # Извлечение данных из ответа
@@ -63,12 +64,13 @@ async def get_weather(message: Message):
 
         # Отправка сообщения пользователю
         await message.answer(answer_message, parse_mode='HTML')
-    
+
+    except KeyError:
+        await message.answer("Не удалось найти город. Проверьте правильность написания и попробуйте снова.")
     except Exception as e:
         print(e)
-        await message.answer('Пожалуйста, проверьте правильность названия города.')
+        await message.answer("Произошла непредвиденная ошибка. Попробуйте позже.")
 
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    dp.start_polling(loop=loop)
+    asyncio.run(dp.start_polling(bot))
